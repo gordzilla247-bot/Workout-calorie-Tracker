@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ROBCO PIP-BOY WORKOUT & NUTRITION DATABANK</title>
+  <!-- QuaggaJS for Barcode Scanning -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+  <!-- Tesseract.js for Label OCR Recognition -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <style>
+    :root {
+      --pip-green: #33ff33;
+      --pip-dark-green: #002b00;
+      --pip-bg: #050e05;
+      --pip-border: #115511;
+      --pip-alert: #ff3333;
+      --pip-amber: #ffb000;
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Courier New', Courier, monospace;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: #000;
+      color: var(--pip-green);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* CRT Terminal Frame */
+    .terminal-container {
+      width: 100vw;
+      height: 100vh;
+      max-width: 600px;
+      max-height: 900px;
+      background-color: var(--pip-bg);
+      border: 4px solid var(--pip-border);
+      border-radius: 12px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 0 20px rgba(51, 255, 51, 0.2);
+      overflow: hidden;
+    }
+
+    /* Scanline Overlay */
+    .scanlines {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(
+        rgba(18, 16, 16, 0) 50%, 
+        rgba(0, 0, 0, 0.35) 50%
+      );
+      background-size: 100% 4px;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    /* Header */
+    header {
+      padding: 10px;
+      border-bottom: 2px solid var(--pip-green);
+      text-align: center;
+      background-color: var(--pip-dark-green);
+      text-shadow: 0 0 5px var(--pip-green);
+    }
+
+    header h1 {
+      font-size: 1.1rem;
+      letter-spacing: 2px;
+    }
+
+    /* Navigation Tabs */
+    nav {
+      display: flex;
+      border-bottom: 2px solid var(--pip-green);
+      background: #001a00;
+    }
+
+    .nav-btn {
+      flex: 1;
+      padding: 10px 2px;
+      background: none;
+      border: none;
+      color: var(--pip-green);
+      font-weight: bold;
+      font-size: 0.75rem;
+      cursor: pointer;
+      border-right: 1px solid var(--pip-border);
+      text-transform: uppercase;
+    }
+
+    .nav-btn:last-child { border-right: none; }
+    .nav-btn.active {
+      background-color: var(--pip-green);
+      color: var(--pip-bg);
+    }
+
+    /* Main View Area */
+    main {
+      flex: 1;
+      padding: 12px;
+      overflow-y: auto;
+      z-index: 2;
+    }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Section Styling */
+    .section-title {
+      border-bottom: 1px dashed var(--pip-green);
+      padding-bottom: 4px;
+      margin-bottom: 10px;
+      font-size: 0.9rem;
+      letter-spacing: 1px;
+    }
+
+    /* Terminal Inputs */
+    .input-group {
+      margin-bottom: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+    }
+
+    input, select {
+      background: #001100;
+      border: 1px solid var(--pip-green);
+      color: var(--pip-green);
+      padding: 8px;
+      font-size: 0.85rem;
+      outline: none;
+      border-radius: 2px;
+    }
+
+    input:focus, select:focus {
+      box-shadow: 0 0 8px var(--pip-green);
+    }
+
+    /* Terminal Buttons */
+    .pip-btn {
+      background: var(--pip-dark-green);
+      border: 1px solid var(--pip-green);
+      color: var(--pip-green);
+      padding: 10px;
+      font-weight: bold;
+      text-transform: uppercase;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 5px;
+      box-shadow: 0 0 4px var(--pip-border);
+    }
+
+    .pip-btn:active {
+      background: var(--pip-green);
+      color: var(--pip-bg);
+    }
+
+    /* Logs & Lists */
+    .log-card {
+      border: 1px solid var(--pip-border);
+      padding: 8px;
+      margin-bottom: 8px;
+      background: rgba(0, 30, 0, 0.4);
+      position: relative;
+    }
+
+    .log-card .delete-btn {
+      position: absolute;
+      top: 4px; right: 4px;
+      background: none;
+      border: none;
+      color: var(--pip-alert);
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    /* Timer Display */
+    .timer-display {
+      font-size: 2.5rem;
+      text-align: center;
+      margin: 15px 0;
+      text-shadow: 0 0 10px var(--pip-green);
+      letter-spacing: 3px;
+    }
+
+    /* Scanner Viewfinder */
+    #interactive.viewport {
+      width: 100%;
+      height: 220px;
+      border: 1px solid var(--pip-green);
+      position: relative;
+      overflow: hidden;
+      margin-bottom: 10px;
+    }
+    #interactive.viewport video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* Custom Radio/Grid Selection */
+    .flex-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .stat-box {
+      border: 1px solid var(--pip-border);
+      padding: 8px;
+      text-align: center;
+      background: rgba(0, 20, 0, 0.6);
+    }
+
+    .stat-val {
+      font-size: 1.2rem;
+      font-weight: bold;
+      margin-top: 4px;
+    }
+
+    .ocr-status {
+      font-size: 0.75rem;
+      color: var(--pip-amber);
+      margin-top: 4px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<div class="terminal-container">
+  <div class="scanlines"></div>
+  
+  <header>
+    <h1>ROBCO PIP-BOY 3000</h1>
+    <div style="font-size:0.65rem; color:#11aa11; margin-top:2px;">SYS v5.0.0 - HEALTH DATABANK</div>
+  </header>
+
+  <nav>
+    <button class="nav-btn active" onclick="switchTab('workout')">WORKOUT</button>
+    <button class="nav-btn" onclick="switchTab('timer')">REST TIMER</button>
+    <button class="nav-btn" onclick="switchTab('nutrition')">NUTRITION</button>
+    <button class="nav-btn" onclick="switchTab('metrics')">STATS</button>
+  </nav>
+
+  <main>
+    <!-- WORKOUT TAB -->
+    <div id="tab-workout" class="tab-content active">
+      <div class="section-title">> SELECT ROUTINE PRESET</div>
+      <div class="input-group">
+        <label>TYPE & SKILL LEVEL</label>
+        <select id="routine-select" onchange="loadPresetRoutine()">
+          <option value="cal-beg">Calisthenics - Beginner</option>
+          <option value="cal-int">Calisthenics - Intermediate</option>
+          <option value="cal-adv">Calisthenics - Advanced</option>
+          <option value="wt-beg">Weightlifting - Beginner</option>
+          <option value="wt-int">Weightlifting - Intermediate</option>
+        </select>
+      </div>
+
+      <div class="input-group">
+        <label>ASSIGN TO DAY</label>
+        <select id="routine-day">
+          <option>Monday</option>
+          <option>Tuesday</option>
+          <option>Wednesday</option>
+          <option>Thursday</option>
+          <option>Friday</option>
+          <option>Saturday</option>
+          <option>Sunday</option>
+        </select>
+      </div>
+
+      <div id="routine-preview" class="log-card" style="font-size:0.8rem; line-height:1.4;"></div>
+
+      <button class="pip-btn" onclick="logRoutineSession()">LOG PRESET SESSION</button>
+
+      <div class="section-title" style="margin-top:15px;">> MANUAL EXERCISE LOG</div>
+      <div class="input-group">
+        <label>EXERCISE NAME</label>
+        <input type="text" id="ex-name" placeholder="e.g. Push Ups / Bench Press">
+      </div>
+      <div class="flex-grid">
+        <div class="input-group">
+          <label>SETS</label>
+          <input type="number" id="ex-sets" value="3">
+        </div>
+        <div class="input-group">
+          <label>REPS</label>
+          <input type="number" id="ex-reps" value="10">
+        </div>
+      </div>
+      <div class="input-group">
+        <label>WEIGHT (LBS / KG)</label>
+        <input type="number" id="ex-weight" value="0">
+      </div>
+      <button class="pip-btn" onclick="logManualExercise()">COMMIT EXERCISE TO LOG</button>
+
+      <div class="section-title" style="margin-top:15px;">> WORKOUT HISTORY</div>
+      <div id="workout-history"></div>
+    </div>
+
+    <!-- REST TIMER TAB -->
+    <div id="tab-timer" class="tab-content">
+      <div class="section-title">> REST INTERVAL TIMER</div>
+      <div class="timer-display" id="timer-readout">01:00</div>
+      
+      <div class="flex-grid">
+        <button class="pip-btn" onclick="setTimer(30)">30 SEC</button>
+        <button class="pip-btn" onclick="setTimer(60)">60 SEC</button>
+        <button class="pip-btn" onclick="setTimer(90)">90 SEC</button>
+        <button class="pip-btn" onclick="setTimer(120)">120 SEC</button>
+      </div>
+      
+      <button class="pip-btn" style="margin-top:10px; background:#004400;" onclick="startTimer()">START TIMER</button>
+      <button class="pip-btn" style="margin-top:5px; border-color:var(--pip-alert); color:var(--pip-alert);" onclick="resetTimer()">ABORT</button>
+    </div>
+
+    <!-- NUTRITION TAB -->
+    <div id="tab-nutrition" class="tab-content">
+      <div class="section-title">> DAILY CALORIC TARGET</div>
+      <div class="input-group">
+        <label>TARGET CALORIES (KCAL)</label>
+        <input type="number" id="target-calories" value="2500" onchange="saveCalorieTarget()">
+      </div>
+
+      <div class="section-title" style="margin-top:15px;">> AUTOMATED LOGGING TOOLS</div>
+      <button class="pip-btn" onclick="toggleScanner()">1. BARCODE CAMERA SCANNER</button>
+      <div id="interactive" class="viewport" style="display:none;"></div>
+
+      <div style="margin-top:8px;">
+        <label class="pip-btn" style="display:block; text-align:center; cursor:pointer;">
+          2. PHOTO NUTRITION LABEL SCANNER (OCR)
+          <input type="file" id="label-photo-input" accept="image/*" capture="environment" style="display:none;" onchange="processNutritionPhoto(event)">
+        </label>
+        <div id="ocr-status" class="ocr-status"></div>
+      </div>
+
+      <div class="section-title" style="margin-top:15px;">> QUICK-ADD VAULT RATIONS</div>
+      <div class="input-group">
+        <label>PRESET STAPLE FOODS</label>
+        <select id="preset-food-select" onchange="populatePresetFields()">
+          <option value="">-- Select Food --</option>
+          <option value="broc">Steamed Broccoli (100g)</option>
+          <option value="rice">White Rice (1 cup cooked)</option>
+          <option value="beans">Black Beans (1 cup)</option>
+          <option value="chicken">Chicken Breast (100g)</option>
+          <option value="egg">Whole Egg (1 large)</option>
+          <option value="banana">Banana (1 medium)</option>
+          <option value="oats">Rolled Oats (1/2 cup)</option>
+          <option value="beef">Ground Beef 90/10 (100g)</option>
+        </select>
+      </div>
+
+      <div class="section-title" style="margin-top:15px;">> LOG RATION ENTRY</div>
+      <div class="input-group">
+        <label>FOOD ITEM NAME</label>
+        <input type="text" id="food-name" placeholder="Ration item name">
+      </div>
+      <div class="flex-grid">
+        <div class="input-group">
+          <label>PORTION QTY</label>
+          <input type="number" id="food-qty" value="1" step="0.1" oninput="scalePortion()">
+        </div>
+        <div class="input-group">
+          <label>UNIT</label>
+          <select id="food-unit" onchange="scalePortion()">
+            <option value="serving">Servings</option>
+            <option value="g">Grams (g)</option>
+            <option value="oz">Ounces (oz)</option>
+            <option value="cup">Cups</option>
+          </select>
+        </div>
+      </div>
+      <div class="flex-grid">
+        <div class="input-group">
+          <label>CALORIES (KCAL)</label>
+          <input type="number" id="food-cal" value="0">
+        </div>
+        <div class="input-group">
+          <label>PROTEIN (G)</label>
+          <input type="number" id="food-pro" value="0">
+        </div>
+      </div>
+      <button class="pip-btn" onclick="logFoodEntry()">LOG FOOD ENTRY</button>
+      <button class="pip-btn" style="border-color:var(--pip-amber); color:var(--pip-amber);" onclick="saveCustomAsPreset()">SAVE AS QUICK-ADD PRESET</button>
+
+      <div class="section-title" style="margin-top:15px;">> TODAY'S RATION LOG</div>
+      <div id="food-history"></div>
+    </div>
+
+    <!-- STATS TAB -->
+    <div id="tab-metrics" class="tab-content">
+      <div class="section-title">> LOG BODY METRICS</div>
+      <div class="flex-grid">
+        <div class="input-group">
+          <label>WEIGHT (LBS)</label>
+          <input type="number" id="body-weight" step="0.1">
+        </div>
+        <div class="input-group">
+          <label>BODY FAT %</label>
+          <input type="number" id="body-fat" step="0.1">
+        </div>
+      </div>
+      <button class="pip-btn" onclick="logBodyMetrics()">SAVE BODY METRICS</button>
+
+      <div class="section-title" style="margin-top:15px;">> SUMMARY DATABANK</div>
+      <div class="flex-grid">
+        <div class="stat-box">
+          <label>CALORIES</label>
+          <div class="stat-val" id="stat-cals">0 / 2500</div>
+        </div>
+        <div class="stat-box">
+          <label>LATEST WEIGHT</label>
+          <div class="stat-val" id="stat-weight">-- LBS</div>
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top:15px;">> BODY WEIGHT LOG HISTORY</div>
+      <div id="metric-history"></div>
+    </div>
+  </main>
+</div>
+
+<script>
+  // --- SOUND EFFECTS (Web Audio API) ---
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  function playBeep(freq = 440, type = 'square', duration = 0.08) {
+    try {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    } catch(e) {}
+  }
+
+  // --- APP STATE & LOCAL STORAGE ---
+  let appData = {
+    workouts: [],
+    food: [],
+    metrics: [],
+    customPresets: [],
+    targetCals: 2500
+  };
+
+  function loadData() {
+    const saved = localStorage.getItem('robco_databank');
+    if (saved) {
+      try {
+        appData = JSON.parse(saved);
+      } catch(e) {}
+    }
+    document.getElementById('target-calories').value = appData.targetCals || 2500;
+    renderCustomPresets();
+    renderWorkoutHistory();
+    renderFoodHistory();
+    renderMetricHistory();
+    updateStatsSummary();
+  }
+
+  function saveData() {
+    localStorage.setItem('robco_databank', JSON.stringify(appData));
+    updateStatsSummary();
+  }
+
+  // --- NAVIGATION ---
+  function switchTab(tabId) {
+    playBeep(600);
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+    
+    document.getElementById(`tab-${tabId}`).classList.add('active');
+    event.target.classList.add('active');
+
+    // Stop scanner if leaving nutrition tab
+    if (tabId !== 'nutrition' && isScanning) {
+      toggleScanner();
+    }
+  }
+
+  // --- WORKOUT ROUTINES PRESETS ---
+  const routines = {
+    'cal-beg': [ { name: 'Push Ups', sets: 3, reps: 8 }, { name: 'Bodyweight Squats', sets: 3, reps: 12 }, { name: 'Plank', sets: 3, reps: 30 } ],
+    'cal-int': [ { name: 'Pull Ups', sets: 4, reps: 8 }, { name: 'Dips', sets: 4, reps: 10 }, { name: 'Declined Push Ups', sets: 4, reps: 12 } ],
+    'cal-adv': [ { name: 'Muscle Ups', sets: 4, reps: 5 }, { name: 'Single Leg Squats', sets: 4, reps: 8 }, { name: 'Pike Pushups', sets: 4, reps: 10 } ],
+    'wt-beg': [ { name: 'Bench Press', sets: 3, reps: 10 }, { name: 'Goblet Squats', sets: 3, reps: 10 }, { name: 'Dumbbell Rows', sets: 3, reps: 10 } ],
+    'wt-int': [ { name: 'Barbell Back Squat', sets: 4, reps: 8 }, { name: 'Overhead Press', sets: 4, reps: 8 }, { name: 'Deadlift', sets: 3, reps: 5 } ]
+  };
+
+  function loadPresetRoutine() {
+    const selected = document.getElementById('routine-select').value;
+    const list = routines[selected];
+    let html = `<strong>ROUTINE BREAKDOWN:</strong><br>`;
+    list.forEach(ex => {
+      html += `- ${ex.name}: ${ex.sets} Sets x ${ex.reps} Reps<br>`;
+    });
+    document.getElementById('routine-preview').innerHTML = html;
+  }
+
+  function logRoutineSession() {
+    playBeep(800);
+    const selected = document.getElementById('routine-select').value;
+    const day = document.getElementById('routine-day').value;
+    const list = routines[selected];
+
+    const entry = {
+      id: Date.now(),
+      date: new Date().toLocaleDateString(),
+      day: day,
+      title: document.getElementById('routine-select').options[document.getElementById('routine-select').selectedIndex].text,
+      exercises: list
+    };
+
+    appData.workouts.unshift(entry);
+    saveData();
+    renderWorkoutHistory();
+  }
+
+  function logManualExercise() {
+    playBeep(800);
+    const name = document.getElementById('ex-name').value.trim();
+    const sets = parseInt(document.getElementById('ex-sets').value) || 0;
+    const reps = parseInt(document.getElementById('ex-reps').value) || 0;
+    const weight = parseInt(document.getElementById('ex-weight').value) || 0;
+
+    if (!name) return alert('ENTER EXERCISE NAME');
+
+    const entry = {
+      id: Date.now(),
+      date: new Date().toLocaleDateString(),
+      day: 'Logged Session',
+      title: 'Manual Exercise Log',
+      exercises: [{ name, sets, reps, weight }]
+    };
+
+    appData.workouts.unshift(entry);
+    saveData();
+    renderWorkoutHistory();
+    document.getElementById('ex-name').value = '';
+  }
+
+  function renderWorkoutHistory() {
+    const container = document.getElementById('workout-history');
+    if (!appData.workouts.length) {
+      container.innerHTML = '<div style="font-size:0.75rem; color:#117711;">NO WORKOUT DATA RECORDED</div>';
+      return;
+    }
+
+    container.innerHTML = appData.workouts.map(w => `
+      <div class="log-card">
+        <button class="delete-btn" onclick="deleteWorkout(${w.id})">X</button>
+        <div style="font-size:0.8rem; font-weight:bold;">${w.date} - ${w.day}</div>
+        <div style="font-size:0.75rem; color:#aaffaa;">${w.title}</div>
+        <div style="font-size:0.75rem; margin-top:4px;">
+          ${w.exercises.map(e => `• ${e.name}:${e.sets}s x ${e.reps}r${e.weight ? `(${e.weight}lbs)` : ''}`).join('<br>')}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function deleteWorkout(id) {
+    playBeep(300);
+    appData.workouts = appData.workouts.filter(w => w.id !== id);
+    saveData();
+    renderWorkoutHistory();
+  }
+
+  // --- REST TIMER ---
+  let timerInterval = null;
+  let timerSeconds = 60;
+
+  function setTimer(sec) {
+    playBeep(500);
+    timerSeconds = sec;
+    updateTimerDisplay();
+  }
+
+  function updateTimerDisplay() {
+    const m = Math.floor(timerSeconds / 60).toString().padStart(2, '0');
+    const s = (timerSeconds % 60).toString().padStart(2, '0');
+    document.getElementById('timer-readout').innerText = `${m}:${s}`;
+  }
+
+  function startTimer() {
+    playBeep(1000);
+    clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+      if (timerSeconds > 0) {
+        timerSeconds--;
+        updateTimerDisplay();
+      } else {
+        clearInterval(timerInterval);
+        playBeep(1200, 'sine', 0.5);
+        alert('REST PERIOD ELAPSED!');
+      }
+    }, 1000);
+  }
+
+  function resetTimer() {
+    playBeep(200);
+    clearInterval(timerInterval);
+    timerSeconds = 60;
+    updateTimerDisplay();
+  }
+
+  // --- NUTRITION PRESETS & SCALING ---
+  const presetFoods = {
+    'broc': { name: 'Steamed Broccoli', cal: 35, pro: 2.5, baseQty: 100, baseUnit: 'g' },
+    'rice': { name: 'White Rice (Cooked)', cal: 205, pro: 4.2, baseQty: 1, baseUnit: 'cup' },
+    'beans': { name: 'Black Beans', cal: 227, pro: 15.2, baseQty: 1, baseUnit: 'cup' },
+    'chicken': { name: 'Chicken Breast', cal: 165, pro: 31, baseQty: 100, baseUnit: 'g' },
+    'egg': { name: 'Whole Egg', cal: 70, pro: 6, baseQty: 1, baseUnit: 'serving' },
+    'banana': { name: 'Banana', cal: 105, pro: 1.3, baseQty: 1, baseUnit: 'serving' },
+    'oats': { name: 'Rolled Oats', cal: 150, pro: 5, baseQty: 0.5, baseUnit: 'cup' },
+    'beef': { name: 'Ground Beef 90/10', cal: 176, pro: 20, baseQty: 100, baseUnit: 'g' }
+  };
+
+  let activeBaseFood = null;
+
+  function renderCustomPresets() {
+    const select = document.getElementById('preset-food-select');
+    // Remove previous custom options
+    const existingCustoms = select.querySelectorAll('.custom-opt');
+    existingCustoms.forEach(opt => opt.remove());
+
+    if (appData.customPresets && appData.customPresets.length) {
+      appData.customPresets.forEach((c, idx) => {
+        const opt = document.createElement('option');
+        opt.value = `custom_${idx}`;
+        opt.className = 'custom-opt';
+        opt.innerText = `[CUSTOM] ${c.name} (${c.baseQty}${c.baseUnit})`;
+        select.appendChild(opt);
+      });
+    }
+  }
+
+  function populatePresetFields() {
+    const val = document.getElementById('preset-food-select').value;
+    if (!val) return;
+
+    if (val.startsWith('custom_')) {
+      const idx = parseInt(val.split('_')[1]);
+      activeBaseFood = appData.customPresets[idx];
+    } else {
+      activeBaseFood = presetFoods[val];
+    }
+
+    if (!activeBaseFood) return;
+
+    document.getElementById('food-name').value = activeBaseFood.name;
+    document.getElementById('food-qty').value = activeBaseFood.baseQty;
+    document.getElementById('food-unit').value = activeBaseFood.baseUnit;
+    document.getElementById('food-cal').value = Math.round(activeBaseFood.cal);
+    document.getElementById('food-pro').value = Math.round(activeBaseFood.pro * 10) / 10;
+  }
+
+  function scalePortion() {
+    if (!activeBaseFood) return;
+    const currentQty = parseFloat(document.getElementById('food-qty').value) || 0;
+    const factor = currentQty / activeBaseFood.baseQty;
+
+    document.getElementById('food-cal').value = Math.round(activeBaseFood.cal * factor);
+    document.getElementById('food-pro').value = (Math.round((activeBaseFood.pro * factor) * 10) / 10).toFixed(1);
+  }
+
+  function saveCustomAsPreset() {
+    playBeep(900);
+    const name = document.getElementById('food-name').value.trim();
+    const cal = parseInt(document.getElementById('food-cal').value) || 0;
+    const pro = parseFloat(document.getElementById('food-pro').value) || 0;
+    const baseQty = parseFloat(document.getElementById('food-qty').value) || 1;
+    const baseUnit = document.getElementById('food-unit').value;
+
+    if (!name) return alert('ENTER A NAME FOR THE PRESET');
+
+    if (!appData.customPresets) appData.customPresets = [];
+    appData.customPresets.push({ name, cal, pro, baseQty, baseUnit });
+    saveData();
+    renderCustomPresets();
+    alert(`SAVED "${name.toUpperCase()}" TO VAULT PRESETS`);
+  }
+
+  function logFoodEntry() {
+    playBeep(700);
+    const name = document.getElementById('food-name').value.trim();
+    const qty = parseFloat(document.getElementById('food-qty').value) || 1;
+    const unit = document.getElementById('food-unit').value;
+    const cal = parseInt(document.getElementById('food-cal').value) || 0;
+    const pro = parseFloat(document.getElementById('food-pro').value) || 0;
+
+    if (!name) return alert('ENTER FOOD NAME');
+
+    const entry = {
+      id: Date.now(),
+      date: new Date().toLocaleDateString(),
+      name: `${name} (${qty} ${unit})`,
+      cal: cal,
+      pro: pro
+    };
+
+    appData.food.unshift(entry);
+    saveData();
+    renderFoodHistory();
+
+    document.getElementById('food-name').value = '';
+    document.getElementById('food-cal').value = '0';
+    document.getElementById('food-pro').value = '0';
+    activeBaseFood = null;
+  }
+
+  function renderFoodHistory() {
+    const container = document.getElementById('food-history');
+    const today = new Date().toLocaleDateString();
+    const todayFoods = appData.food.filter(f => f.date === today);
+
+    if (!todayFoods.length) {
+      container.innerHTML = '<div style="font-size:0.75rem; color:#117711;">NO RATIONS LOGGED TODAY</div>';
+      return;
+    }
+
+    container.innerHTML = todayFoods.map(f => `
+      <div class="log-card">
+        <button class="delete-btn" onclick="deleteFood(${f.id})">X</button>
+        <div style="font-size:0.8rem; font-weight:bold;">${f.name}</div>
+        <div style="font-size:0.75rem; color:#aaffaa;">${f.cal} KCAL | ${f.pro}g PROTEIN</div>
+      </div>
+    `).join('');
+  }
+
+  function deleteFood(id) {
+    playBeep(300);
+    appData.food = appData.food.filter(f => f.id !== id);
+    saveData();
+    renderFoodHistory();
+  }
+
+  function saveCalorieTarget() {
+    appData.targetCals = parseInt(document.getElementById('target-calories').value) || 2500;
+    saveData();
+  }
+
+  // --- BARCODE SCANNER INTEGRATION ---
+  let isScanning = false;
+
+  function toggleScanner() {
+    const viewport = document.getElementById('interactive');
+    if (isScanning) {
+      Quagga.stop();
+      viewport.style.display = 'none';
+      isScanning = false;
+    } else {
+      viewport.style.display = 'block';
+      try {
+        Quagga.init({
+          inputStream: {
+            name: "Live",
+            type: "LiveStream",
+            target: viewport,
+            constraints: { facingMode: "environment" }
+          },
+          decoder: { readers: ["ean_reader", "upc_reader"] }
+        }, function (err) {
+          if (err) {
+            alert('CAMERA INITIALIZATION FAILED');
+            viewport.style.display = 'none';
+            return;
+          }
+          Quagga.start();
+          isScanning = true;
+        });
+
+        Quagga.onDetected(onBarcodeScanned);
+      } catch(e) {
+        alert('SCANNER ERROR: ACCESS DENIED OR UNSUPPORTED');
+        viewport.style.display = 'none';
+      }
+    }
+  }
+
+  function onBarcodeScanned(result) {
+    if (!result || !result.codeResult) return;
+    const code = result.codeResult.code;
+    playBeep(1200);
+    toggleScanner(); // Close camera
+
+    // Lookup Open Food Facts
+    fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`, {
+      headers: { 'User-Agent': 'RobCoTerminalApp - Web - Version 1.0' }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 1 && data.product) {
+          const p = data.product;
+          document.getElementById('food-name').value = p.product_name || 'Scanned Ration';
+          document.getElementById('food-cal').value = Math.round(p.nutriments['energy-kcal_100g'] || 0);
+          document.getElementById('food-pro').value = Math.round((p.nutriments.proteins_100g || 0) * 10) / 10;
+          document.getElementById('food-qty').value = 100;
+          document.getElementById('food-unit').value = 'g';
+        } else {
+          alert('PRODUCT BARCODE NOT FOUND. USE NUTRITION LABEL OCR SCANNER BELOW.');
+        }
+      })
+      .catch(() => alert('NETWORK ERROR FETCHING BARCODE DATA'));
+  }
+
+  // --- OCR NUTRITION LABEL SCANNER ---
+  async function processNutritionPhoto(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const statusEl = document.getElementById('ocr-status');
+    statusEl.innerText = '> INITIALIZING OCR SCANNER ENGINE...';
+    playBeep(600);
+
+    let worker = null;
+    try {
+      worker = await Tesseract.createWorker('eng');
+      statusEl.innerText = '> ANALYZING LABEL IMAGE DATA...';
+      
+      const ret = await worker.recognize(file);
+      const text = ret.data.text;
+      statusEl.innerText = '> SCAN COMPLETE. PARSING MACROS...';
+
+      // Parse Calories with robust regex
+      let calMatch = text.match(/(?:calories|calor|cals)\s*[:\-]?\s*(\d+)/i);
+      if (calMatch && calMatch[1]) {
+        document.getElementById('food-cal').value = parseInt(calMatch[1]);
+      }
+
+      // Parse Protein
+      let proMatch = text.match(/(?:protein|prot)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*g?/i);
+      if (proMatch && proMatch[1]) {
+        document.getElementById('food-pro').value = parseFloat(proMatch[1]);
+      }
+
+      if (!document.getElementById('food-name').value) {
+        document.getElementById('food-name').value = 'Scanned Label Item';
+      }
+
+      statusEl.innerText = '> MACROS EXTRACTED INTO FORM BELOW!';
+      playBeep(1000);
+    } catch(err) {
+      statusEl.innerText = '> OCR SCAN FAILED. MANUALLY INPUT MACROS.';
+      alert('COULD NOT READ TEXT CLEARLY. ENSURE GOOD LIGHTING.');
+    } finally {
+      if (worker) {
+        await worker.terminate();
+      }
+    }
+  }
+
+  // --- METRICS & SUMMARY ---
+  function logBodyMetrics() {
+    playBeep(800);
+    const weight = parseFloat(document.getElementById('body-weight').value) || 0;
+    const fat = parseFloat(document.getElementById('body-fat').value) || 0;
+
+    if (!weight) return alert('ENTER WEIGHT');
+
+    const entry = {
+      id: Date.now(),
+      date: new Date().toLocaleDateString(),
+      weight: weight,
+      fat: fat
+    };
+
+    appData.metrics.unshift(entry);
+    saveData();
+    renderMetricHistory();
+
+    document.getElementById('body-weight').value = '';
+    document.getElementById('body-fat').value = '';
+  }
+
+  function renderMetricHistory() {
+    const container = document.getElementById('metric-history');
+    if (!appData.metrics.length) {
+      container.innerHTML = '<div style="font-size:0.75rem; color:#117711;">NO BODY METRICS LOGGED</div>';
+      return;
+    }
+
+    container.innerHTML = appData.metrics.map(m => `
+      <div class="log-card">
+        <div style="font-size:0.8rem; font-weight:bold;">${m.date}</div>
+        <div style="font-size:0.75rem; color:#aaffaa;">WEIGHT: ${m.weight} LBS ${m.fat ? `| FAT: ${m.fat}%` : ''}</div>
+      </div>
+    `).join('');
+  }
+
+  function updateStatsSummary() {
+    const today = new Date().toLocaleDateString();
+    const todayCals = appData.food
+      .filter(f => f.date === today)
+      .reduce((acc, curr) => acc + curr.cal, 0);
+
+    const target = appData.targetCals || 2500;
+    document.getElementById('stat-cals').innerText = `${todayCals} / ${target}`;
+
+    if (appData.metrics.length) {
+      document.getElementById('stat-weight').innerText = `${appData.metrics[0].weight} LBS`;
+    }
+  }
+
+  // Initial Startup
+  loadData();
+  loadPresetRoutine();
+</script>
+</body>
+</html>
